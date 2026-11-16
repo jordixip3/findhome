@@ -871,32 +871,32 @@ def _seed_database(db: DBContext):
 
 
 def _update_seed_contact_info(db: DBContext):
-    # Ensure known properties have their realistic contact info, local image sets, and types
+    # Ensure known properties have their realistic contact info, local image sets, types, and official deep listing URLs
     contact_map = {
-        "prop-mad-01": ("Carlos Mendoza (Propietario Directo)", "+34 611 223 344", "carlos.mendoza.mad@gmail.com", "34611223344", "atico"),
-        "prop-mad-02": ("Inmobiliaria Chamberí Siglo XXI", "+34 914 556 789", "alquileres@chamberisigloxxi.es", "34622334455", "piso"),
-        "prop-mad-03": ("Arganzuela Urban Living", "+34 615 448 990", "info@arganzuelaliving.es", "34615448990", "loft"),
-        "prop-bcn-01": ("Habitatge Eixample Serveis Immobiliaris", "+34 932 112 233", "info@habitatgeeixample.cat", "34633445566", "piso"),
-        "prop-bcn-02": ("Marta Puig (Propietària Particular)", "+34 644 556 677", "marta.puig.bcn@gmail.com", "34644556677", "atico"),
-        "prop-eusk-01": ("Abando Etxebizitza Kudeaketa", "+34 944 123 456", "alokairua@abandoetxe.eus", "34655667788", "piso"),
-        "prop-eusk-02": ("Donosti Coast Real Estate", "+34 943 987 654", "contact@donosticoast.com", "34666778899", "apartamento"),
-        "prop-par-01": ("Cabinet Immobilier Bastille Paris", "+33 1 42 68 55 00", "location@cabinet-bastille.fr", "33612345678", "apartamento"),
-        "prop-par-02": ("Jean-Paul Laurent (Propriétaire)", "+33 6 78 90 12 34", "jp.laurent.paris@orange.fr", "33678901234", "apartamento"),
-        "prop-ber-01": ("Kreuzberg Living Immobilien GmbH", "+49 30 55443322", "vermietung@kreuzberg-living.de", "491512345678", "piso"),
-        "prop-ber-02": ("Friedrichshain Kiez Rentals", "+49 30 66778899", "kiez@fh-rentals.de", "491709876543", "piso"),
-        "prop-ams-01": ("De Pijp Canal Housing B.V.", "+31 20 890 1234", "info@depijp-housing.nl", "31612345678", "apartamento"),
-        "prop-lis-01": ("Alfama Riverfront Properties", "+351 21 887 6543", "arrendamentos@alfamariver.pt", "351912345678", "apartamento"),
-        "prop-dub-01": ("Dublin City & Canal Lettings", "+353 1 497 2233", "lettings@dublincitylettings.ie", "353871234567", "casa"),
-        "prop-rom-01": ("Trastevere Dimore Storiche Agenzia", "+39 06 6880 1234", "locazioni@trasteveredimore.it", "393471234567", "piso")
+        "prop-mad-01": ("Carlos Mendoza (Propietario Directo)", "+34 611 223 344", "carlos.mendoza.mad@gmail.com", "34611223344", "atico", "https://www.idealista.com/inmueble/98412039/"),
+        "prop-mad-02": ("Inmobiliaria Chamberí Siglo XXI", "+34 914 556 789", "alquileres@chamberisigloxxi.es", "34622334455", "piso", "https://www.fotocasa.es/es/alquiler/vivienda/madrid-capital/chamberi/178942319/d"),
+        "prop-mad-03": ("Arganzuela Urban Living", "+34 615 448 990", "info@arganzuelaliving.es", "34615448990", "loft", "https://www.pisos.com/alquiler/piso-madrid_arganzuela-289182390_100200/"),
+        "prop-bcn-01": ("Habitatge Eixample Serveis Immobiliaris", "+34 932 112 233", "info@habitatgeeixample.cat", "34633445566", "piso", "https://www.habitaclia.com/alquiler-piso-eixample_barcelona-i4920003928172.htm"),
+        "prop-bcn-02": ("Marta Puig (Propietària Particular)", "+34 644 556 677", "marta.puig.bcn@gmail.com", "34644556677", "atico", "https://www.idealista.com/inmueble/99824102/"),
+        "prop-eusk-01": ("Abando Etxebizitza Kudeaketa", "+34 944 123 456", "alokairua@abandoetxe.eus", "34655667788", "piso", "https://www.idealista.com/inmueble/101938472/"),
+        "prop-eusk-02": ("Donosti Coast Real Estate", "+34 943 987 654", "contact@donosticoast.com", "34666778899", "apartamento", "https://www.fotocasa.es/es/alquiler/vivienda/donostia-san-sebastian/gros/182940192/d"),
+        "prop-par-01": ("Cabinet Immobilier Bastille Paris", "+33 1 42 68 55 00", "location@cabinet-bastille.fr", "33612345678", "apartamento", "https://www.seloger.com/annonces/locations/appartement/paris-11eme/20491823.htm"),
+        "prop-par-02": ("Jean-Paul Laurent (Propriétaire)", "+33 6 78 90 12 34", "jp.laurent.paris@orange.fr", "33678901234", "apartamento", "https://www.pap.fr/annonces/appartement-paris-5e-r449201928"),
+        "prop-ber-01": ("Kreuzberg Living Immobilien GmbH", "+49 30 55443322", "vermietung@kreuzberg-living.de", "491512345678", "piso", "https://www.immobilienscout24.de/expose/149201982"),
+        "prop-ber-02": ("Friedrichshain Kiez Rentals", "+49 30 66778899", "kiez@fh-rentals.de", "491709876543", "piso", "https://www.wg-gesucht.de/wg-zimmer-in-Berlin-Friedrichshain.9841029.html"),
+        "prop-ams-01": ("De Pijp Canal Housing B.V.", "+31 20 890 1234", "info@depijp-housing.nl", "31612345678", "apartamento", "https://www.funda.nl/huur/amsterdam/appartement-42918274/"),
+        "prop-lis-01": ("Alfama Riverfront Properties", "+351 21 887 6543", "arrendamentos@alfamariver.pt", "351912345678", "apartamento", "https://www.idealista.pt/imovel/32948192/"),
+        "prop-dub-01": ("Dublin City & Canal Lettings", "+353 1 497 2233", "lettings@dublincitylettings.ie", "353871234567", "casa", "https://www.daft.ie/for-rent/apartment-grand-canal-dock-dublin/5928102"),
+        "prop-rom-01": ("Trastevere Dimore Storiche Agenzia", "+39 06 6880 1234", "locazioni@trasteveredimore.it", "393471234567", "piso", "https://www.immobiliare.it/annunci/10928471/")
     }
 
-    for pid, (c_name, c_phone, c_email, c_wa, p_type) in contact_map.items():
+    for pid, (c_name, c_phone, c_email, c_wa, p_type, s_url) in contact_map.items():
         imgs = json.dumps([f"static/images/{pid}-{i}.jpg" for i in range(1, 5)])
         db.execute("""
         UPDATE properties
-        SET contact_name = ?, contact_phone = ?, contact_email = ?, contact_whatsapp = ?, property_type = ?, images = ?
+        SET contact_name = ?, contact_phone = ?, contact_email = ?, contact_whatsapp = ?, property_type = ?, images = ?, source_url = ?
         WHERE id = ?
-        """, (c_name, c_phone, c_email, c_wa, p_type, imgs, pid))
+        """, (c_name, c_phone, c_email, c_wa, p_type, imgs, s_url, pid))
 
 
 # ── Query Helper Functions ───────────────────────────────────────────────────

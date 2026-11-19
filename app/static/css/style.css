@@ -1740,5 +1740,309 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+/* ── AI Voice Agent & WhatsApp Styles ────────────────────────── */
+.voice-floating-trigger {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 1000;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voice-floating-trigger:hover {
+  transform: translateY(-4px) scale(1.03);
+}
+
+.voice-pulse-ring {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border: 2px solid rgba(37, 211, 102, 0.6);
+  border-radius: 50px;
+  animation: voicePulse 2.2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes voicePulse {
+  0% { transform: scale(0.96); opacity: 0.9; }
+  60% { transform: scale(1.15); opacity: 0.15; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+.voice-trigger-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(6, 78, 59, 0.95));
+  border: 1.5px solid rgba(37, 211, 102, 0.65);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(37, 211, 102, 0.3);
+  padding: 10px 18px;
+  border-radius: 50px;
+  backdrop-filter: blur(12px);
+}
+
+.voice-trigger-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #25D366);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  color: white;
+  box-shadow: 0 2px 10px rgba(37, 211, 102, 0.5);
+  flex-shrink: 0;
+}
+
+.voice-trigger-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-trigger-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.voice-trigger-wsp {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+/* Voice Modal Specifics */
+.voice-modal-content {
+  max-width: 680px;
+  width: 95%;
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(37, 211, 102, 0.2);
+}
+
+.voice-modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px 20px;
+}
+
+.voice-agent-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(37, 211, 102, 0.15);
+  border: 1px solid rgba(37, 211, 102, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.voice-online-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: rgba(37, 211, 102, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  padding: 2px 6px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+}
+
+.btn-wa-header-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #25D366;
+  color: #ffffff !important;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 20px;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-wa-header-pill:hover {
+  background: #20ba59;
+  transform: translateY(-1px);
+}
+
+.voice-visualizer-stage {
+  background: #090e17;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px;
+  position: relative;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.voice-status-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--azure-400);
+}
+
+.voice-control-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.voice-mic-button {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7, #0ea5e9);
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.4);
+  transition: all 0.2s ease;
+}
+
+.voice-mic-button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 26px rgba(14, 165, 233, 0.6);
+}
+
+.voice-mic-button.recording {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #fca5a5;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.7);
+  animation: pulseRecording 1.4s infinite;
+}
+
+@keyframes pulseRecording {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.voice-wsp-banner {
+  background: linear-gradient(135deg, rgba(37, 211, 102, 0.12), rgba(6, 78, 59, 0.25));
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.wsp-big-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #25D366;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.voice-transcript-stream {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-right: 4px;
+}
+
+.voice-bubble {
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 88%;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.voice-bubble.agent {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  align-self: flex-start;
+  color: #e2e8f0;
+}
+
+.voice-bubble.user {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  align-self: flex-end;
+  color: #ffffff;
+}
+
+.bubble-sender {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--azure-400);
+  margin-bottom: 3px;
+}
+
+.voice-bubble.user .bubble-sender {
+  color: #bae6fd;
+}
+
+.voice-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.voice-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-sub);
+  font-size: 0.75rem;
+  padding: 5px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.voice-chip:hover {
+  background: rgba(37, 211, 102, 0.15);
+  border-color: rgba(37, 211, 102, 0.4);
+  color: #4ade80;
+  transform: translateY(-1px);
+}
+
+.voice-input-form {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .voice-floating-trigger {
+    bottom: 16px;
+    right: 16px;
+  }
+  .voice-trigger-text {
+    display: none;
+  }
+  .voice-trigger-inner {
+    padding: 8px;
+    border-radius: 50%;
+  }
+}
+
+
 
 

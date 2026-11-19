@@ -262,3 +262,31 @@ async def admin_clear_logs():
     return {"status": "cleared", "message": "Historial de accesos reseteado correctamente."}
 
 
+# ── AI Voice Agent Endpoints ──────────────────────────────────────────────────
+from app.services.voice_agent_service import voice_agent, AGENT_WHATSAPP_NUMBER
+
+class VoiceAgentRequest(BaseModel):
+    message: str
+    lang: Optional[str] = "es"
+    context: Optional[Dict[str, Any]] = None
+
+@router.post("/voice-agent/chat", summary="Conversational AI Voice Agent linked to WhatsApp +34 603 331 391")
+async def voice_agent_chat(payload: VoiceAgentRequest):
+    return voice_agent.process_query(payload.message, lang=payload.lang or "es")
+
+@router.get("/voice-agent/config", summary="Get Voice Agent configuration and WhatsApp link")
+async def voice_agent_config():
+    return {
+        "whatsapp_number": AGENT_WHATSAPP_NUMBER,
+        "whatsapp_link": voice_agent.build_whatsapp_link("Hola, quiero hablar con el Agente de Voz de LookingForHome."),
+        "supported_languages": ["es", "en", "ca", "fr", "de"],
+        "capabilities": [
+            "Búsqueda de vivienda compartida por voz",
+            "Cálculo de reparto de alquiler",
+            "Vincular y coordinar visitas por WhatsApp",
+            "Soporte multilenguaje en tiempo real"
+        ]
+    }
+
+
+

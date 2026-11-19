@@ -2728,4 +2728,279 @@ function exportAdminLogsToCSV() {
   showToast('📥 Archivo CSV descargado con éxito', 'success');
 }
 
+// ── AI Voice Agent (+34 603 331 391) Controller ──────────────────────────────
+const VOICE_AGENT_WSP = "34603331391";
+let voiceRecognition = null;
+let isVoiceRecording = false;
+let isAgentSpeaking = false;
+let waveAnimationId = null;
+
+function openVoiceAgentModal() {
+  const modal = document.getElementById('voice-agent-modal');
+  if (modal) modal.style.display = 'flex';
+  initWaveformVisualizer();
+  updateVoiceStatus('Pulsa el micrófono para hablar o escribe tu consulta');
+}
+
+function closeVoiceAgentModal() {
+  const modal = document.getElementById('voice-agent-modal');
+  if (modal) modal.style.display = 'none';
+  stopVoiceRecording();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  isAgentSpeaking = false;
+  if (waveAnimationId) cancelAnimationFrame(waveAnimationId);
+}
+
+function updateVoiceStatus(text, isAlert = false) {
+  const el = document.getElementById('voice-status-text');
+  if (el) {
+    el.textContent = text;
+    el.style.color = isAlert ? '#ef4444' : 'var(--azure-400)';
+  }
+}
+
+function toggleVoiceRecording() {
+  if (isVoiceRecording) {
+    stopVoiceRecording();
+  } else {
+    startVoiceRecording();
+  }
+}
+
+function startVoiceRecording() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    showToast('Tu navegador no soporta entrada de voz por micrófono. Usa el teclado.', 'error');
+    updateVoiceStatus('Entrada de voz no soportada por el navegador. Escribe abajo.', true);
+    return;
+  }
+
+  // Cancel any speaking
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  isAgentSpeaking = false;
+
+  try {
+    voiceRecognition = new SpeechRec();
+    voiceRecognition.lang = currentLang === 'en' ? 'en-US' : (currentLang === 'ca' ? 'ca-ES' : 'es-ES');
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = false;
+
+    voiceRecognition.onstart = () => {
+      isVoiceRecording = true;
+      const btn = document.getElementById('voice-mic-btn');
+      if (btn) btn.classList.add('recording');
+      const caption = document.getElementById('voice-mic-caption');
+      if (caption) caption.textContent = '🔴 Escuchando... Habla ahora';
+      updateVoiceStatus('🎙️ Te estoy escuchando atentamente...');
+    };
+
+    voiceRecognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      stopVoiceRecording();
+      if (transcript && transcript.trim()) {
+        sendVoicePrompt(transcript.trim());
+      }
+    };
+
+    voiceRecognition.onerror = (event) => {
+      console.warn('Speech recognition error:', event.error);
+      stopVoiceRecording();
+      if (event.error === 'not-allowed') {
+        updateVoiceStatus('⚠️ Permiso de micrófono denegado. Permítelo en el navegador.', true);
+      } else {
+        updateVoiceStatus('No se pudo capturar audio. Inténtalo de nuevo.', true);
+      }
+    };
+
+    voiceRecognition.onend = () => {
+      stopVoiceRecording();
+    };
+
+    voiceRecognition.start();
+  } catch (err) {
+    console.error('Failed to start speech recognition:', err);
+    stopVoiceRecording();
+  }
+}
+
+function stopVoiceRecording() {
+  isVoiceRecording = false;
+  if (voiceRecognition) {
+    try { voiceRecognition.stop(); } catch(e) {}
+    voiceRecognition = null;
+  }
+  const btn = document.getElementById('voice-mic-btn');
+  if (btn) btn.classList.remove('recording');
+  const caption = document.getElementById('voice-mic-caption');
+  if (caption) caption.textContent = 'Haz clic en el micrófono y habla';
+}
+
+function handleVoiceTextSubmit(event) {
+  if (event) event.preventDefault();
+  const input = document.getElementById('voice-text-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  sendVoicePrompt(text);
+}
+
+async function sendVoicePrompt(userText) {
+  appendVoiceMessage('user', userText);
+  updateVoiceStatus('🧠 Pensando respuesta con LookingForHome AI...');
+
+  try {
+    const res = await fetch(`${API_BASE}/voice-agent/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: userText,
+        lang: currentLang || 'es'
+      })
+    });
+
+    if (!res.ok) throw new Error('Error en el servicio de agente de voz');
+    const data = await res.json();
+
+    appendVoiceMessage('agent', data.reply_text, data.whatsapp_url, data.suggested_properties);
+    speakAgentReply(data.reply_text);
+
+    // Sync WhatsApp banner link
+    if (data.whatsapp_url) {
+      const wspLink = document.getElementById('voice-wsp-direct-link');
+      if (wspLink) wspLink.href = data.whatsapp_url;
+    }
+  } catch (err) {
+    console.error('Error in voice agent chat:', err);
+    const fallbackMsg = `Puedes contactar directamente con nuestro agente de voz en WhatsApp: +34 603 331 391.`;
+    appendVoiceMessage('agent', fallbackMsg, `https://wa.me/${VOICE_AGENT_WSP}`);
+    speakAgentReply(fallbackMsg);
+  }
+}
+
+function appendVoiceMessage(sender, text, whatsappUrl = null, properties = []) {
+  const stream = document.getElementById('voice-transcript-stream');
+  if (!stream) return;
+
+  const bubble = document.createElement('div');
+  bubble.className = `voice-bubble ${sender}`;
+
+  let extraHtml = '';
+  if (whatsappUrl) {
+    extraHtml += `
+      <div style="margin-top: 8px;">
+        <a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="btn-wa-chip" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 0.76rem;">
+          💬 Abrir en WhatsApp (+34 603 331 391)
+        </a>
+      </div>
+    `;
+  }
+
+  if (properties && properties.length > 0) {
+    extraHtml += `
+      <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+        ${properties.map(p => `
+          <div style="background: rgba(255,255,255,0.06); padding: 6px 8px; border-radius: 6px; font-size: 0.74rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>🏠 <strong>${p.city}</strong>: ${p.bedrooms} habs — ${Math.round(p.rent_per_person || 450)}€/p</span>
+            <button onclick="closeVoiceAgentModal(); viewPropertyDetail('${p.id}')" style="background: #0284c7; color: white; border: none; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; cursor: pointer;">Ver</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  bubble.innerHTML = `
+    <div class="bubble-sender">${sender === 'agent' ? '🤖 Agente IA (Voz)' : '👤 Tú'}</div>
+    <div class="bubble-text">${text}</div>
+    ${extraHtml}
+  `;
+
+  stream.appendChild(bubble);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function speakAgentReply(text) {
+  if (!window.speechSynthesis) return;
+
+  window.speechSynthesis.cancel();
+  isAgentSpeaking = true;
+  updateVoiceStatus('🔊 El agente está hablando...');
+
+  const cleanText = text.replace(/[*_#`]/g, '');
+  const utter = new SpeechSynthesisUtterance(cleanText);
+  utter.rate = 1.02;
+  utter.pitch = 1.0;
+  utter.lang = currentLang === 'en' ? 'en-US' : (currentLang === 'ca' ? 'ca-ES' : 'es-ES');
+
+  // Find natural sounding voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const matchedVoice = voices.find(v => v.lang.startsWith(utter.lang.substring(0, 2)));
+  if (matchedVoice) utter.voice = matchedVoice;
+
+  utter.onend = () => {
+    isAgentSpeaking = false;
+    updateVoiceStatus('Pulsa el micrófono para hablar o escribe tu consulta');
+  };
+
+  utter.onerror = () => {
+    isAgentSpeaking = false;
+    updateVoiceStatus('Pulsa el micrófono para hablar o escribe tu consulta');
+  };
+
+  window.speechSynthesis.speak(utter);
+}
+
+// ── Dynamic Audio Waveform Visualizer ─────────────────────────────────────────
+function initWaveformVisualizer() {
+  const canvas = document.getElementById('voice-wave-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let step = 0;
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+
+    const isActive = isVoiceRecording || isAgentSpeaking;
+    const amplitude = isActive ? (isVoiceRecording ? 28 : 22) : 5;
+    const barsCount = 36;
+    const barWidth = 6;
+    const gap = (width - (barsCount * barWidth)) / (barsCount + 1);
+
+    for (let i = 0; i < barsCount; i++) {
+      const x = gap + i * (barWidth + gap);
+      const wave = Math.sin((step + i * 0.4) * 0.2);
+      const wave2 = Math.cos((step * 0.5 + i * 0.6) * 0.2);
+      const barHeight = Math.max(4, Math.abs(wave * wave2) * amplitude * 2);
+
+      const grad = ctx.createLinearGradient(0, centerY - barHeight, 0, centerY + barHeight);
+      if (isVoiceRecording) {
+        grad.addColorStop(0, '#ef4444');
+        grad.addColorStop(1, '#f87171');
+      } else if (isAgentSpeaking) {
+        grad.addColorStop(0, '#10b981');
+        grad.addColorStop(1, '#38bdf8');
+      } else {
+        grad.addColorStop(0, '#0284c7');
+        grad.addColorStop(1, '#1e293b');
+      }
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(x, centerY - barHeight / 2, barWidth, barHeight, 3);
+      ctx.fill();
+    }
+
+    step++;
+    waveAnimationId = requestAnimationFrame(draw);
+  }
+
+  if (waveAnimationId) cancelAnimationFrame(waveAnimationId);
+  draw();
+}
+
+
 

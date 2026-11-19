@@ -42,6 +42,9 @@
       <button class="nav-btn" id="nav-btn-admin" onclick="openAdminPanel()">
         <span>🛡️</span> <span data-i18n="nav_admin">Admin &amp; Visitas</span>
       </button>
+      <button class="nav-btn" id="nav-btn-voice" onclick="openVoiceAgentModal()" style="border: 1px solid rgba(37, 211, 102, 0.45); background: rgba(37, 211, 102, 0.12); color: #4ade80;">
+        <span>🎙️</span> <span>Agente Voz (+34 603 331 391)</span>
+      </button>
     </nav>
 
     <!-- Language Selector (5 languages: ES, EN, CA, EU, FR) -->
@@ -807,6 +810,117 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Voice Agent Button -->
+  <div class="voice-floating-trigger" id="voice-floating-btn" onclick="openVoiceAgentModal()" title="Hablar con el Agente de Voz IA (WhatsApp +34 603 331 391)">
+    <div class="voice-pulse-ring"></div>
+    <div class="voice-trigger-inner">
+      <span class="voice-trigger-icon">🎙️</span>
+      <div class="voice-trigger-text">
+        <span class="voice-trigger-title">Agente de Voz IA</span>
+        <span class="voice-trigger-wsp">WSP +34 603 331 391</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voice Agent Interactive Modal -->
+  <div class="modal" id="voice-agent-modal" style="display: none;">
+    <div class="modal-content voice-modal-content">
+      <div class="modal-header voice-modal-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="voice-agent-avatar">🤖</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 style="font-size: 1.15rem; font-weight: 800; color: #ffffff; margin: 0;">Agente de Voz IA</h3>
+              <span class="voice-online-badge">● EN LÍNEA</span>
+            </div>
+            <div style="font-size: 0.76rem; color: var(--azure-400); margin-top: 2px;">
+              Asistente de Vivienda Digna &amp; Reparto de Arriendo
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <a href="https://wa.me/34603331391?text=Hola%20Agente%20de%20Voz%20de%20LookingForHome%2C%20quiero%20informaci%C3%B3n%20para%20buscar%20piso%20compartido." target="_blank" rel="noopener noreferrer" class="btn-wa-header-pill" title="Abrir WhatsApp Oficial">
+            <span>💬</span> <span>+34 603 331 391</span>
+          </a>
+          <button class="modal-close-btn" onclick="closeVoiceAgentModal()">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding: 20px;">
+        <!-- Waveform Visualizer Stage -->
+        <div class="voice-visualizer-stage">
+          <canvas id="voice-wave-canvas" width="600" height="90" style="width: 100%; height: 90px;"></canvas>
+          <div id="voice-status-text" class="voice-status-indicator">
+            Pulsa el micrófono para hablar o escribe tu consulta
+          </div>
+        </div>
+
+        <!-- Mic Control & Speech Input Area -->
+        <div class="voice-control-center">
+          <button id="voice-mic-btn" class="voice-mic-button" onclick="toggleVoiceRecording()" title="Hablar con el agente de voz">
+            <span id="voice-mic-icon">🎙️</span>
+          </button>
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+            <span id="voice-mic-caption">Haz clic en el micrófono y habla</span>
+          </div>
+        </div>
+
+        <!-- Direct WhatsApp Integration Card -->
+        <div class="voice-wsp-banner">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="wsp-big-icon">💬</div>
+            <div style="flex: 1; min-width: 200px;">
+              <div style="font-size: 0.88rem; font-weight: 800; color: #ffffff;">
+                Agente Vinculado a WhatsApp Oficial
+              </div>
+              <div style="font-size: 0.76rem; color: #86efac;">
+                Envía notas de voz o mensajes al <strong>+34 603 331 391</strong> las 24 horas
+              </div>
+            </div>
+            <a id="voice-wsp-direct-link" href="https://wa.me/34603331391?text=Hola%2C%20quiero%20conectar%20con%20el%20agente%20de%20voz%20de%20LookingForHome" target="_blank" rel="noopener noreferrer" class="btn-contact-wa" style="padding: 8px 14px; font-size: 0.82rem;">
+              <span>🟢 Abrir en WhatsApp</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Conversation Stream -->
+        <div class="voice-transcript-stream" id="voice-transcript-stream">
+          <div class="voice-bubble agent">
+            <div class="bubble-sender">🤖 Agente IA (Voz)</div>
+            <div class="bubble-text">
+              ¡Hola! Soy tu Agente de Voz de LookingForHome. Puedes decirme qué ciudad buscas, cuántos sois para calcular la cuota por persona o conectar directamente con nuestro WhatsApp <strong>+34 603 331 391</strong>. ¿En qué te ayudo hoy?
+            </div>
+          </div>
+        </div>
+
+        <!-- Preset Quick Chips -->
+        <div class="voice-quick-chips">
+          <button class="voice-chip" onclick="sendVoicePrompt('Buscar pisos para compartir en Madrid')">
+            🏠 Pisos en Madrid
+          </button>
+          <button class="voice-chip" onclick="sendVoicePrompt('Buscar pisos en Barcelona')">
+            🌊 Pisos en Barcelona
+          </button>
+          <button class="voice-chip" onclick="sendVoicePrompt('Somos 4 personas y tenemos 1800 euros de presupuesto')">
+            💶 Calcular cuota para 4
+          </button>
+          <button class="voice-chip" onclick="sendVoicePrompt('Quiero hablar por WhatsApp al +34603331391')">
+            📱 WhatsApp +34 603 331 391
+          </button>
+        </div>
+
+        <!-- Text Input Fallback Bar -->
+        <form class="voice-input-form" onsubmit="handleVoiceTextSubmit(event)">
+          <input type="text" id="voice-text-input" class="form-input" placeholder="O escribe tu consulta aquí si prefieres teclear..." style="flex: 1; padding: 10px 14px; font-size: 0.88rem;">
+          <button type="submit" class="btn-submit" style="padding: 10px 18px; font-size: 0.88rem;">
+            <span>Enviar 💬</span>
+          </button>
+        </form>
       </div>
     </div>
   </div>

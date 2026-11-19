@@ -248,6 +248,21 @@ def init_db():
                 created_at VARCHAR(100) NOT NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
+
+            # 7. WhatsApp Automated Agent Logs (MySQL)
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS whatsapp_logs (
+                id VARCHAR(64) PRIMARY KEY,
+                from_number VARCHAR(50) NOT NULL,
+                to_number VARCHAR(50) DEFAULT '+34603331391',
+                message_type VARCHAR(30) DEFAULT 'text',
+                incoming_message TEXT,
+                agent_reply TEXT,
+                audio_url VARCHAR(500) DEFAULT '',
+                status VARCHAR(30) DEFAULT 'replied',
+                created_at VARCHAR(100) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
         else:
             # SQLite Tables
             db.execute("""
@@ -365,6 +380,20 @@ def init_db():
             )
             """)
 
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS whatsapp_logs (
+                id TEXT PRIMARY KEY,
+                from_number TEXT NOT NULL,
+                to_number TEXT DEFAULT '+34603331391',
+                message_type TEXT DEFAULT 'text',
+                incoming_message TEXT,
+                agent_reply TEXT,
+                audio_url TEXT DEFAULT '',
+                status TEXT DEFAULT 'replied',
+                created_at TEXT NOT NULL
+            )
+            """)
+
             # Ensure columns exist in SQLite if upgrading existing database
             db.execute("PRAGMA table_info(properties)")
             existing_cols = [r["name"] if isinstance(r, dict) else r[1] for r in db.fetchall()]
@@ -401,6 +430,15 @@ def init_db():
                 _seed_access_logs(db)
         except Exception as e:
             print(f"[AccessLogs] Notice while checking access logs: {e}")
+
+        # Check if whatsapp_logs has initial seed data
+        try:
+            db.execute("SELECT COUNT(*) FROM whatsapp_logs")
+            if db.fetchval() == 0:
+                _seed_whatsapp_logs(db)
+        except Exception as e:
+            print(f"[WhatsAppLogs] Notice while checking whatsapp logs: {e}")
+
 
 
 def _seed_database(db: DBContext):
@@ -1388,4 +1426,59 @@ def _seed_access_logs(db: DBContext):
             log_id, ip, country, ccode, region, city, lat, lng,
             path, "GET", 200, ua, dev, "https://lookingforhome.duckdns.org", t_str
         ))
+
+
+# ── WhatsApp AI Auto-Responder Logs ───────────────────────────────────────────
+def record_whatsapp_log(
+    from_number: str,
+    incoming_message: str,
+    agent_reply: str,
+    to_number: str = "+34603331391",
+    message_type: str = "text",
+    audio_url: str = "",
+    status: str = "replied"
+) -> str:
+    log_id = f"wsp-{uuid.uuid4().hex[:12]}"
+    created_at = datetime.now(timezone.utc).isoformat()
+    with DBContext() as db:
+        db.execute("""
+        INSERT INTO whatsapp_logs (
+            id, from_number, to_number, message_type, incoming_message, agent_reply, audio_url, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (log_id, from_number, to_number, message_type, incoming_message, agent_reply, audio_url, status, created_at))
+    return log_id
+
+
+def get_whatsapp_logs(limit: int = 50) -> List[Dict[str, Any]]:
+    with DBContext() as db:
+        db.execute("SELECT * FROM whatsapp_logs ORDER BY created_at DESC LIMIT ?", (min(limit, 100),))
+        rows = db.fetchall()
+    return [dict(r) for r in rows]
+
+
+def _seed_whatsapp_logs(db: DBContext):
+    now = datetime.now(timezone.utc)
+    from datetime import timedelta
+
+    seed_conversations = [
+        ("+34655123456", "text", "Hola buenas tardes, buscamos piso para compartir 4 amigos en Madrid zona céntrica",
+         "¡Hola! Tenemos disponible en Madrid una vivienda exterior en Malasaña de 4 habitaciones por 475€/mes por persona. ¿Deseas concertar una visita esta semana?"),
+        ("+34678998877", "audio", "[Nota de voz transcrita: Hola, quería saber cuánto pagamos cada uno si el alquiler total son 1600 euros y somos 4 personas]",
+         "Para un alquiler de 1600€ entre 4 personas, cada uno pagaría exactamente 400€ al mes. En LookingForHome os ayudamos a formalizar el contrato conjunto."),
+        ("+33612345678", "text", "Hello, are there flats available in Paris or Berlin for international students?",
+         "Hello! Yes, we have verified community flats in Berlin (Friedrichshain) for 480€/person and Paris (Bastille) for 520€/person. Would you like to schedule a virtual tour?"),
+        ("+34611445566", "voice_call", "[Llamada entrante atendida por Agente IA: Consulta de disponibilidad en Poblenou, Barcelona]",
+         "Llamada atendida automáticamente por Agente de Voz. Se envió enlace del ático en Poblenou Playa (488€/persona) vía WhatsApp.")
+    ]
+
+    for i, (sender, mtype, user_msg, bot_msg) in enumerate(seed_conversations):
+        t_delta = timedelta(hours=(len(seed_conversations) - i) * 3)
+        t_str = (now - t_delta).isoformat()
+        log_id = f"wsp-seed-{i+1:03d}"
+        db.execute("""
+        INSERT INTO whatsapp_logs (
+            id, from_number, to_number, message_type, incoming_message, agent_reply, audio_url, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (log_id, sender, "+34603331391", mtype, user_msg, bot_msg, "", "replied", t_str))
+
 

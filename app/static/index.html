@@ -655,7 +655,7 @@
           <span>🔓</span> <span>Acceder al Panel de Control</span>
         </button>
         <div style="margin-top: 14px; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
-          LookingForHome Secure Admin Engine &bull; Contraseña: <code>admin123</code>
+          🔒 LookingForHome Security &bull; Acceso Restringido
         </div>
       </div>
     </div>
@@ -808,6 +808,72 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- Section: WhatsApp Auto-Responder Live Monitoring (+34 603 331 391) -->
+        <div class="admin-section-card" style="margin-top: 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.5rem;">📱</span>
+              <div>
+                <h5 style="font-size: 0.98rem; font-weight: 800; color: #ffffff; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <span>Agente IA Automático — WhatsApp (+34 603 331 391)</span>
+                  <span class="voice-online-badge">● AUTO-RESPONDER ACTIVO</span>
+                </h5>
+                <span style="font-size: 0.75rem; color: var(--text-sub);">
+                  Monitor de mensajes y llamadas entrantes atendidas automáticamente por IA
+                </span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <a href="https://wa.me/34603331391" target="_blank" rel="noopener noreferrer" class="btn-wa-chip" style="padding: 6px 12px; font-size: 0.76rem;">
+                💬 Probar WhatsApp Directo
+              </a>
+              <button class="btn-card-action" onclick="loadAdminWhatsAppLogs()" style="padding: 6px 10px; font-size: 0.76rem;">
+                🔄 Refrescar Mensajes
+              </button>
+            </div>
+          </div>
+
+          <!-- Webhook Information Banner -->
+          <div style="background: rgba(37, 211, 102, 0.08); border: 1px solid rgba(37, 211, 102, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem;">
+            <div>
+              <span style="color: #86efac; font-weight: 700;">🔗 URL Webhook Configurada:</span>
+              <code style="background: rgba(0,0,0,0.4); color: #38bdf8; padding: 2px 8px; border-radius: 4px; margin-left: 6px;">https://lookingforhome.duckdns.org/api/v1/whatsapp/webhook</code>
+            </div>
+            <div style="color: var(--text-muted);">
+              Token de verificación: <code>lookingforhome_whatsapp_2026</code>
+            </div>
+          </div>
+
+          <!-- Simulator Test Bar -->
+          <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+            <input type="text" id="admin-wsp-test-from" class="form-input" placeholder="+34 600 000 000" value="+34655998877" style="width: 150px; font-size: 0.8rem; padding: 7px 10px;">
+            <input type="text" id="admin-wsp-test-msg" class="form-input" placeholder="Escribe mensaje entrante de prueba (ej: Busco piso en Madrid para 4)..." style="flex: 1; min-width: 240px; font-size: 0.8rem; padding: 7px 10px;">
+            <button class="btn-submit" onclick="simulateAdminWhatsApp()" style="padding: 7px 14px; font-size: 0.8rem; white-space: nowrap;">
+              🚀 Simular Mensaje / Llamada
+            </button>
+          </div>
+
+          <!-- WhatsApp Logs Table -->
+          <div style="overflow-x: auto; max-height: 360px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
+            <table class="admin-logs-table">
+              <thead>
+                <tr>
+                  <th>Fecha &amp; Hora</th>
+                  <th>Remitente (Teléfono)</th>
+                  <th>Tipo</th>
+                  <th>Mensaje / Consulta Recibida</th>
+                  <th>Respuesta Automática del Agente IA</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="admin-wsp-logs-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

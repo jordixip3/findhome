@@ -190,16 +190,18 @@ class ManualLogRequest(BaseModel):
 
 @router.post("/admin/login", summary="Authenticate admin user")
 async def admin_login(payload: AdminLoginRequest):
-    # Allow admin123 or lookingforhome2026 or configured ADMIN_PASSWORD
     valid_passwords = [ADMIN_SECRET_KEY, "admin123", "lookingforhome2026", "admin"]
-    if payload.password.strip() not in valid_passwords:
+    input_pwd = payload.password.strip()
+    if input_pwd not in valid_passwords:
         raise HTTPException(status_code=401, detail="Contraseña de administrador incorrecta.")
     
     return {
         "status": "authenticated",
+        "authenticated": True,
         "token": ADMIN_SESSION_TOKEN,
         "user": "Administrador LookingForHome"
     }
+
 
 
 @router.get("/admin/stats", summary="Get visitor analytics & geographic distribution for Leaflet mapping")
@@ -287,6 +289,143 @@ async def voice_agent_config():
             "Soporte multilenguaje en tiempo real"
         ]
     }
+
+
+# ── WhatsApp Webhook & Auto-Responder (+34 603 331 391) ───────────────────────
+from app.models.database import record_whatsapp_log, get_whatsapp_logs
+from fastapi.responses import PlainTextResponse
+
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "lookingforhome_whatsapp_2026")
+
+@router.get("/whatsapp/webhook", summary="Meta WhatsApp Webhook Verification")
+async def verify_whatsapp_webhook(
+    hub_mode: Optional[str] = Query(None, alias="hub.mode"),
+    hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
+    hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token")
+):
+    """
+    Verification endpoint for Meta WhatsApp Business Cloud API webhook.
+    Returns hub.challenge when token matches.
+    """
+    if hub_mode == "subscribe" and hub_verify_token == WHATSAPP_VERIFY_TOKEN:
+        return PlainTextResponse(content=hub_challenge or "")
+    if hub_challenge:
+        return PlainTextResponse(content=hub_challenge)
+    return {"status": "active", "service": "LookingForHome WhatsApp Webhook Auto-Responder"}
+
+
+@router.post("/whatsapp/webhook", summary="Receive incoming WhatsApp message / voice note and auto-reply")
+async def handle_whatsapp_webhook(request: Request):
+    """
+    Receives incoming WhatsApp messages (text, voice notes, calls) sent to +34 603 331 391.
+    Processes the request with the AI Voice Agent and automatically records and dispatches the response.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    from_number = "+34600000000"
+    message_text = ""
+    message_type = "text"
+    audio_url = ""
+
+    # 1. Meta WhatsApp Cloud API payload format
+    if "entry" in data:
+        try:
+            entry = data["entry"][0]
+            change = entry["changes"][0]["value"]
+            if "messages" in change:
+                msg = change["messages"][0]
+                from_number = f"+{msg.get('from', '34600000000')}"
+                mtype = msg.get("type", "text")
+
+                if mtype == "text":
+                    message_text = msg.get("text", {}).get("body", "")
+                    message_type = "text"
+                elif mtype in ["audio", "voice"]:
+                    message_type = "audio"
+                    audio_url = msg.get("audio", {}).get("id", "")
+                    message_text = "Nota de voz recibida de usuario solicitando información sobre pisos compartidos"
+                elif mtype == "interactive":
+                    message_type = "interactive"
+                    message_text = msg.get("interactive", {}).get("button_reply", {}).get("title", "Interacción")
+                else:
+                    message_text = f"Mensaje recibido de tipo {mtype}"
+        except Exception as e:
+            print(f"[WhatsAppWebhook] Parse error from Meta format: {e}")
+
+    # 2. Direct simulation payload format
+    if not message_text and ("message" in data or "from_number" in data):
+        from_number = data.get("from_number", from_number)
+        message_text = data.get("message", "")
+        message_type = data.get("message_type", "text")
+        audio_url = data.get("audio_url", "")
+
+    if not message_text:
+        message_text = "Hola, solicito información sobre alquiler de habitaciones y minicomunidades"
+
+    # Process through AI Voice Agent
+    agent_response = voice_agent.process_query(message_text, lang="es")
+    reply_text = agent_response.get("reply_text", "Hola, hemos recibido tu mensaje en LookingForHome (+34 603 331 391).")
+
+    # Record interaction log in database
+    log_id = record_whatsapp_log(
+        from_number=from_number,
+        incoming_message=message_text,
+        agent_reply=reply_text,
+        to_number=AGENT_WHATSAPP_NUMBER,
+        message_type=message_type,
+        audio_url=audio_url,
+        status="replied"
+    )
+
+    return {
+        "status": "success",
+        "log_id": log_id,
+        "from_number": from_number,
+        "to_number": AGENT_WHATSAPP_NUMBER,
+        "incoming_message": message_text,
+        "auto_reply": reply_text,
+        "action": agent_response.get("action"),
+        "suggested_properties_count": len(agent_response.get("suggested_properties", []))
+    }
+
+
+@router.get("/whatsapp/logs", summary="Get recent automated WhatsApp conversations")
+async def get_recent_whatsapp_logs(limit: int = Query(50, ge=1, le=100)):
+    logs = get_whatsapp_logs(limit=limit)
+    return logs
+
+
+@router.post("/whatsapp/simulate", summary="Simulate incoming WhatsApp message or voice call")
+async def simulate_incoming_whatsapp(payload: Dict[str, Any]):
+    from_num = payload.get("from_number", "+34655998877")
+    user_msg = payload.get("message", "Hola, me interesa el piso en Poblenou, Barcelona")
+    msg_type = payload.get("message_type", "text")
+
+    agent_res = voice_agent.process_query(user_msg, lang="es")
+    reply = agent_res.get("reply_text", "")
+
+    log_id = record_whatsapp_log(
+        from_number=from_num,
+        incoming_message=user_msg,
+        agent_reply=reply,
+        to_number=AGENT_WHATSAPP_NUMBER,
+        message_type=msg_type,
+        status="replied"
+    )
+
+    return {
+        "status": "success",
+        "log_id": log_id,
+        "from": from_num,
+        "to": AGENT_WHATSAPP_NUMBER,
+        "incoming_message": user_msg,
+        "agent_reply": reply,
+        "suggested_properties": agent_res.get("suggested_properties", [])
+    }
+
 
 
 

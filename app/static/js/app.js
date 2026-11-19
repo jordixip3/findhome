@@ -2334,3 +2334,398 @@ function showToast(msg, type = 'info') {
     toast.style.display = 'none';
   }, 4000);
 }
+
+// ── Admin Panel & Visitor Geolocation Tracking ───────────────────────────────
+let adminToken = localStorage.getItem('findhome_admin_token') || null;
+let adminMap = null;
+let adminMarkers = [];
+let cachedAdminLogs = [];
+
+function openAdminPanel() {
+  if (adminToken) {
+    const dashModal = document.getElementById('admin-dashboard-modal');
+    if (dashModal) dashModal.style.display = 'flex';
+    setTimeout(() => {
+      loadAdminData();
+    }, 100);
+  } else {
+    const loginModal = document.getElementById('admin-login-modal');
+    if (loginModal) loginModal.style.display = 'flex';
+    const pwdInput = document.getElementById('admin-password-input');
+    if (pwdInput) {
+      pwdInput.value = '';
+      setTimeout(() => pwdInput.focus(), 150);
+    }
+  }
+}
+
+function closeAdminLoginModal() {
+  const loginModal = document.getElementById('admin-login-modal');
+  if (loginModal) loginModal.style.display = 'none';
+}
+
+function closeAdminDashboardModal() {
+  const dashModal = document.getElementById('admin-dashboard-modal');
+  if (dashModal) dashModal.style.display = 'none';
+}
+
+async function submitAdminLogin(event) {
+  if (event) event.preventDefault();
+  const pwdInput = document.getElementById('admin-password-input');
+  if (!pwdInput) return;
+  const password = pwdInput.value.trim();
+
+  if (!password) {
+    showToast('Por favor introduce la contraseña de administrador', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.authenticated) {
+      showToast(data.message || 'Contraseña incorrecta', 'error');
+      return;
+    }
+
+    adminToken = data.token;
+    localStorage.setItem('findhome_admin_token', adminToken);
+    closeAdminLoginModal();
+    showToast('Sesión de administración iniciada', 'success');
+
+    const dashModal = document.getElementById('admin-dashboard-modal');
+    if (dashModal) dashModal.style.display = 'flex';
+    setTimeout(() => {
+      loadAdminData();
+    }, 100);
+  } catch (err) {
+    console.error('Error logging into admin:', err);
+    showToast('Error de conexión con el servidor', 'error');
+  }
+}
+
+async function loadAdminData() {
+  try {
+    // 1. Fetch Stats & Map data
+    const statsRes = await fetch(`${API_BASE}/admin/stats`, {
+      headers: { 'Authorization': `Bearer ${adminToken || ''}` }
+    });
+
+    if (statsRes.status === 401) {
+      adminToken = null;
+      localStorage.removeItem('findhome_admin_token');
+      closeAdminDashboardModal();
+      openAdminPanel();
+      return;
+    }
+
+    const stats = await statsRes.json();
+    renderAdminStats(stats);
+    renderAdminMap(stats.geo_locations || []);
+
+    // 2. Fetch Detailed Logs
+    const logsRes = await fetch(`${API_BASE}/admin/logs?limit=150`, {
+      headers: { 'Authorization': `Bearer ${adminToken || ''}` }
+    });
+    if (logsRes.ok) {
+      const logsData = await logsRes.json();
+      cachedAdminLogs = Array.isArray(logsData) ? logsData : (logsData.logs || []);
+      renderAdminLogsTable(cachedAdminLogs);
+    }
+  } catch (err) {
+    console.error('Failed to load admin data:', err);
+    showToast('Error al cargar datos del panel admin', 'error');
+  }
+}
+
+function refreshAdminData() {
+  showToast('Actualizando datos en tiempo real...', 'info');
+  loadAdminData();
+}
+
+async function simulateTestVisit() {
+  try {
+    const res = await fetch(`${API_BASE}/admin/log-visit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: window.location.pathname || '/',
+        referrer: document.referrer || 'direct-test',
+        user_agent: navigator.userAgent
+      })
+    });
+    if (res.ok) {
+      showToast('✅ Visita registrada correctamente con tu IP', 'success');
+      loadAdminData();
+    }
+  } catch (err) {
+    showToast('Error registrando visita', 'error');
+  }
+}
+
+function renderAdminStats(stats) {
+  // Update KPI counters
+  const totalEl = document.getElementById('admin-stat-total-visits');
+  if (totalEl) totalEl.textContent = Number(stats.total_visits || 0).toLocaleString();
+
+  const uniqueEl = document.getElementById('admin-stat-unique-ips');
+  if (uniqueEl) uniqueEl.textContent = Number(stats.unique_ips || 0).toLocaleString();
+
+  const countriesEl = document.getElementById('admin-stat-countries');
+  const numCountries = stats.total_countries !== undefined ? stats.total_countries : (stats.top_countries || []).length;
+  if (countriesEl) countriesEl.textContent = Number(numCountries).toLocaleString();
+
+  const todayEl = document.getElementById('admin-stat-today');
+  if (todayEl) todayEl.textContent = Number(stats.today_visits || 0).toLocaleString();
+
+  // Top Countries breakdown
+  const countriesList = document.getElementById('admin-countries-list');
+  const topCountriesCount = document.getElementById('admin-top-countries-count');
+  if (topCountriesCount) topCountriesCount.textContent = `${(stats.top_countries || []).length} países`;
+
+  if (countriesList) {
+    const top = stats.top_countries || [];
+    const maxVisits = Math.max(1, ...top.map(c => (c.visit_count || c.visits || 1)));
+    countriesList.innerHTML = top.map(c => {
+      const vCount = c.visit_count || c.visits || 0;
+      const uCount = c.unique_visitors || c.unique_ips || 0;
+      const pct = Math.round((vCount / maxVisits) * 100);
+      const flag = getCountryFlag(c.country_code);
+      return `
+        <div class="country-stat-row">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+            <span>${flag} <strong>${c.country}</strong></span>
+            <span style="color: var(--azure-400); font-weight: 700;">${vCount} visitas (${uCount} IPs)</span>
+          </div>
+          <div class="country-stat-bar-bg">
+            <div class="country-stat-bar-fill" style="width: ${pct}%;"></div>
+          </div>
+        </div>
+      `;
+    }).join('') || '<div style="color: var(--text-sub); font-size: 0.8rem;">Sin registros aún</div>';
+  }
+
+  // Device Breakdown
+  const devicesList = document.getElementById('admin-devices-list');
+  if (devicesList) {
+    const devData = stats.device_breakdown || [];
+    const icons = { desktop: '💻 Ordenador / Desktop', mobile: '📱 Móvil / Smartphone', tablet: '📲 Tablet', bot: '🤖 Bot / Crawler' };
+    
+    let entries = [];
+    if (Array.isArray(devData)) {
+      entries = devData.map(d => [d.device_type || 'Desktop', d.count || 0]);
+    } else if (typeof devData === 'object') {
+      entries = Object.entries(devData);
+    }
+
+    devicesList.innerHTML = entries.map(([dev, count]) => `
+      <div class="device-stat-chip">
+        <span>${icons[dev.toLowerCase()] || '💻 ' + dev}</span>
+        <strong style="color: var(--azure-400);">${count}</strong>
+      </div>
+    `).join('') || '<div style="color: var(--text-sub); font-size: 0.8rem;">Sin registros</div>';
+  }
+}
+
+function getCountryFlag(code) {
+  if (!code || code === 'XX' || code === 'LOCAL') return '🌐';
+  if (code.length === 2) {
+    return code.toUpperCase().replace(/./g, char => 
+      String.fromCodePoint(char.charCodeAt(0) + 127397)
+    );
+  }
+  return '🌐';
+}
+
+function renderAdminMap(geoLocations) {
+  const mapContainer = document.getElementById('admin-visitor-map');
+  if (!mapContainer) return;
+
+  if (!adminMap) {
+    adminMap = L.map('admin-visitor-map', {
+      center: [40.4168, -3.7038],
+      zoom: 3,
+      minZoom: 2,
+      maxZoom: 18,
+      zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(adminMap);
+  }
+
+  // Clear existing markers
+  adminMarkers.forEach(m => adminMap.removeLayer(m));
+  adminMarkers = [];
+
+  const bounds = L.latLngBounds([]);
+
+  geoLocations.forEach(loc => {
+    if (!loc.latitude || !loc.longitude) return;
+    const latLng = [loc.latitude, loc.longitude];
+    bounds.extend(latLng);
+
+    const vCount = loc.visit_count || loc.visits || 1;
+    const pinHtml = `
+      <div style="position: relative; width: 30px; height: 30px;">
+        <div class="admin-pulse-ring"></div>
+        <div class="admin-marker-pin" style="background: ${vCount > 10 ? '#ef4444' : '#0284c7'};">
+          <span style="transform: rotate(45deg); font-size: 10px; font-weight: 800; color: #fff;">${vCount > 99 ? '99+' : vCount}</span>
+        </div>
+      </div>
+    `;
+
+    const icon = L.divIcon({
+      className: 'admin-marker-wrapper',
+      html: pinHtml,
+      iconSize: [30, 30],
+      iconAnchor: [15, 30]
+    });
+
+    const marker = L.marker(latLng, { icon }).addTo(adminMap);
+    const flag = getCountryFlag(loc.country_code);
+
+    const popupHtml = `
+      <div style="font-family: var(--font-main); min-width: 200px; color: #0f172a; padding: 4px;">
+        <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; margin-bottom: 4px;">
+          <span>${flag}</span>
+          <span>${loc.city || 'Desconocido'}, ${loc.country}</span>
+        </div>
+        <div style="background: #f1f5f9; padding: 6px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 6px;">
+          <div><strong>Total visitas:</strong> ${vCount}</div>
+          <div><strong>IPs únicas:</strong> ${loc.unique_ips || 1}</div>
+          <div><strong>Último acceso:</strong> ${loc.last_seen ? loc.last_seen.substring(0, 19).replace('T', ' ') : 'Reciente'}</div>
+          <div><strong>Coords:</strong> ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</div>
+        </div>
+      </div>
+    `;
+
+    marker.bindPopup(popupHtml);
+    adminMarkers.push(marker);
+  });
+
+  setTimeout(() => {
+    adminMap.invalidateSize();
+    if (adminMarkers.length > 0) {
+      adminMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 8 });
+    }
+  }, 250);
+}
+
+function adminMapFlyTo(coords, zoom) {
+  if (adminMap && coords) {
+    adminMap.flyTo(coords, zoom, { duration: 1.2 });
+  }
+}
+
+function renderAdminLogsTable(logs) {
+  const tbody = document.getElementById('admin-logs-tbody');
+  if (!tbody) return;
+
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-sub); padding: 24px;">No se encontraron registros de visitas.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(log => {
+    const flag = getCountryFlag(log.country_code);
+    const dateFormatted = log.created_at ? log.created_at.replace('T', ' ').substring(0, 19) : 'Reciente';
+    const dev = log.device_type || log.device || 'Desktop';
+    const deviceIcon = dev.toLowerCase().includes('mobile') ? '📱' : (dev.toLowerCase().includes('tablet') ? '📲' : '💻');
+    const ipAddr = log.ip || log.ip_address || '127.0.0.1';
+
+    return `
+      <tr>
+        <td style="font-family: monospace; font-size: 0.73rem; white-space: nowrap; color: var(--text-muted);">${dateFormatted}</td>
+        <td>
+          <span style="font-family: monospace; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px;">
+            ${ipAddr}
+          </span>
+        </td>
+        <td style="white-space: nowrap;">
+          <span style="margin-right: 4px;">${flag}</span>
+          <strong>${log.country || 'Desconocido'}</strong>
+          ${log.region ? `<span style="font-size: 0.7rem; color: var(--text-muted);">(${log.region})</span>` : ''}
+        </td>
+        <td>${log.city || 'Desconocida'}</td>
+        <td style="font-family: monospace; font-size: 0.72rem; color: var(--azure-300); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${log.path}">
+          ${log.path || '/'}
+        </td>
+        <td style="white-space: nowrap; font-size: 0.73rem;">
+          ${deviceIcon} ${dev}
+        </td>
+        <td>
+          ${log.latitude && log.longitude ? `
+            <button class="btn-map-control" style="padding: 2px 7px; font-size: 0.7rem;" onclick="adminMapFlyTo([${log.latitude}, ${log.longitude}], 10)" title="Centrar mapa en ${log.latitude}, ${log.longitude}">
+              📍 ${log.latitude.toFixed(2)}, ${log.longitude.toFixed(2)}
+            </button>
+          ` : '<span style="color: var(--text-muted); font-size: 0.7rem;">N/A</span>'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterAdminLogs() {
+  const query = (document.getElementById('admin-search-input')?.value || '').toLowerCase().trim();
+  if (!query) {
+    renderAdminLogsTable(cachedAdminLogs);
+    return;
+  }
+
+  const filtered = cachedAdminLogs.filter(l => {
+    const ip = (l.ip || l.ip_address || '').toLowerCase();
+    const city = (l.city || '').toLowerCase();
+    const country = (l.country || '').toLowerCase();
+    const path = (l.path || '').toLowerCase();
+    const dev = (l.device_type || l.device || '').toLowerCase();
+    return ip.includes(query) || city.includes(query) || country.includes(query) || path.includes(query) || dev.includes(query);
+  });
+
+  renderAdminLogsTable(filtered);
+}
+
+function exportAdminLogsToCSV() {
+  if (!cachedAdminLogs || cachedAdminLogs.length === 0) {
+    showToast('No hay registros de visitas para exportar', 'error');
+    return;
+  }
+
+  const headers = ['ID', 'Fecha y Hora', 'IP', 'País', 'Código País', 'Región', 'Ciudad', 'Latitud', 'Longitud', 'Ruta', 'Dispositivo', 'User-Agent'];
+  const rows = cachedAdminLogs.map(l => [
+    l.id || '',
+    l.created_at || '',
+    l.ip || l.ip_address || '',
+    `"${(l.country || '').replace(/"/g, '""')}"`,
+    l.country_code || '',
+    `"${(l.region || '').replace(/"/g, '""')}"`,
+    `"${(l.city || '').replace(/"/g, '""')}"`,
+    l.latitude || '',
+    l.longitude || '',
+    `"${(l.path || '').replace(/"/g, '""')}"`,
+    l.device_type || l.device || '',
+    `"${(l.user_agent || '').replace(/"/g, '""')}"`
+  ]);
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lookingforhome_accesos_${new Date().toISOString().substring(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('📥 Archivo CSV descargado con éxito', 'success');
+}
+
+

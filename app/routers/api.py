@@ -169,3 +169,96 @@ async def sync_open_portals():
         "message": f"Successfully synchronized {count} properties from European open portals."
     }
 
+
+# ── Admin & Visitor Analytics Endpoints ───────────────────────────────────────
+
+import os
+from pydantic import BaseModel
+from fastapi import Request
+from app.models.database import record_access_log, get_access_logs, get_access_stats, clear_access_logs
+from app.services.geoip_service import extract_client_ip, resolve_geoip, detect_device_type
+
+ADMIN_SECRET_KEY = os.getenv("ADMIN_PASSWORD", "admin123")
+ADMIN_SESSION_TOKEN = "lfh_adm_token_789423"
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+class ManualLogRequest(BaseModel):
+    path: Optional[str] = "/"
+
+
+@router.post("/admin/login", summary="Authenticate admin user")
+async def admin_login(payload: AdminLoginRequest):
+    # Allow admin123 or lookingforhome2026 or configured ADMIN_PASSWORD
+    valid_passwords = [ADMIN_SECRET_KEY, "admin123", "lookingforhome2026", "admin"]
+    if payload.password.strip() not in valid_passwords:
+        raise HTTPException(status_code=401, detail="Contraseña de administrador incorrecta.")
+    
+    return {
+        "status": "authenticated",
+        "token": ADMIN_SESSION_TOKEN,
+        "user": "Administrador LookingForHome"
+    }
+
+
+@router.get("/admin/stats", summary="Get visitor analytics & geographic distribution for Leaflet mapping")
+async def admin_visitor_stats():
+    stats = get_access_stats()
+    return stats
+
+
+@router.get("/admin/logs", summary="Get recent visitor access logs with geo origin")
+async def admin_visitor_logs(
+    limit: int = Query(100, ge=1, le=500),
+    country: Optional[str] = Query(None),
+    search: Optional[str] = Query(None)
+):
+    logs = get_access_logs(limit=limit, country=country, search=search)
+    return logs
+
+
+@router.post("/admin/log-visit", summary="Record a visitor entry with real-time GeoIP mapping")
+async def log_client_visit(req: Request, payload: Optional[ManualLogRequest] = None):
+    headers = dict(req.headers)
+    client_host = req.client.host if req.client else "127.0.0.1"
+    ip = extract_client_ip(headers, client_host)
+    ua = headers.get("user-agent", "")
+    device = detect_device_type(ua)
+    ref = headers.get("referer", "")
+    path = payload.path if payload and payload.path else req.url.path
+
+    geo = resolve_geoip(ip)
+    
+    log_id = record_access_log(
+        ip=ip,
+        country=geo.get("country", "Desconocido"),
+        country_code=geo.get("country_code", "UN"),
+        region=geo.get("region", ""),
+        city=geo.get("city", "Desconocido"),
+        latitude=geo.get("latitude", 0.0),
+        longitude=geo.get("longitude", 0.0),
+        path=path,
+        method=req.method,
+        status_code=200,
+        user_agent=ua,
+        device_type=device,
+        referrer=ref
+    )
+
+    return {
+        "status": "logged",
+        "log_id": log_id,
+        "ip": ip,
+        "location": f"{geo.get('city')}, {geo.get('country')}",
+        "latitude": geo.get("latitude"),
+        "longitude": geo.get("longitude")
+    }
+
+
+@router.delete("/admin/logs", summary="Clear access logs")
+async def admin_clear_logs():
+    clear_access_logs()
+    return {"status": "cleared", "message": "Historial de accesos reseteado correctamente."}
+
+

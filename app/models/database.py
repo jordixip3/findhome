@@ -227,6 +227,27 @@ def init_db():
                 created_at VARCHAR(100) NOT NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
+
+            # 6. Access Logs (Visitor IP & Geolocation Analytics)
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS access_logs (
+                id VARCHAR(64) PRIMARY KEY,
+                ip VARCHAR(64) NOT NULL,
+                country VARCHAR(100) DEFAULT 'Desconocido',
+                country_code VARCHAR(10) DEFAULT 'UN',
+                region VARCHAR(100) DEFAULT '',
+                city VARCHAR(100) DEFAULT 'Desconocido',
+                latitude DOUBLE DEFAULT 0.0,
+                longitude DOUBLE DEFAULT 0.0,
+                path VARCHAR(255) DEFAULT '/',
+                method VARCHAR(10) DEFAULT 'GET',
+                status_code INT DEFAULT 200,
+                user_agent VARCHAR(500) DEFAULT '',
+                device_type VARCHAR(50) DEFAULT 'Desktop',
+                referrer VARCHAR(500) DEFAULT '',
+                created_at VARCHAR(100) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
         else:
             # SQLite Tables
             db.execute("""
@@ -324,6 +345,26 @@ def init_db():
             )
             """)
 
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS access_logs (
+                id TEXT PRIMARY KEY,
+                ip TEXT NOT NULL,
+                country TEXT DEFAULT 'Desconocido',
+                country_code TEXT DEFAULT 'UN',
+                region TEXT DEFAULT '',
+                city TEXT DEFAULT 'Desconocido',
+                latitude REAL DEFAULT 0.0,
+                longitude REAL DEFAULT 0.0,
+                path TEXT DEFAULT '/',
+                method TEXT DEFAULT 'GET',
+                status_code INTEGER DEFAULT 200,
+                user_agent TEXT DEFAULT '',
+                device_type TEXT DEFAULT 'Desktop',
+                referrer TEXT DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """)
+
             # Ensure columns exist in SQLite if upgrading existing database
             db.execute("PRAGMA table_info(properties)")
             existing_cols = [r["name"] if isinstance(r, dict) else r[1] for r in db.fetchall()]
@@ -352,6 +393,14 @@ def init_db():
             feed_open_portal_properties(db)
         except Exception as e:
             print(f"[PortalFeeder] Notice while feeding open portals: {e}")
+
+        # Check if access_logs has initial seed data
+        try:
+            db.execute("SELECT COUNT(*) FROM access_logs")
+            if db.fetchval() == 0:
+                _seed_access_logs(db)
+        except Exception as e:
+            print(f"[AccessLogs] Notice while checking access logs: {e}")
 
 
 def _seed_database(db: DBContext):
@@ -1146,3 +1195,197 @@ def save_inquiry(inquiry_dict: Dict[str, Any]) -> str:
         ))
 
     return iq_id
+
+
+# ── Access Logs & Visitor Analytics ──────────────────────────────────────────
+
+def record_access_log(
+    ip: str,
+    country: str = "Desconocido",
+    country_code: str = "UN",
+    region: str = "",
+    city: str = "Desconocido",
+    latitude: float = 0.0,
+    longitude: float = 0.0,
+    path: str = "/",
+    method: str = "GET",
+    status_code: int = 200,
+    user_agent: str = "",
+    device_type: str = "Desktop",
+    referrer: str = ""
+) -> str:
+    log_id = f"log-{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+
+    with DBContext() as db:
+        db.execute("""
+        INSERT INTO access_logs (
+            id, ip, country, country_code, region, city, latitude, longitude,
+            path, method, status_code, user_agent, device_type, referrer, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            log_id, ip, country, country_code, region, city, latitude, longitude,
+            path, method, status_code, (user_agent or "")[:500],
+            device_type, (referrer or "")[:500], now
+        ))
+
+    return log_id
+
+
+def get_access_logs(limit: int = 100, country: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+    with DBContext() as db:
+        query = "SELECT * FROM access_logs WHERE 1=1"
+        params = []
+
+        if country:
+            query += " AND (country = ? OR country_code = ?)"
+            params.extend([country, country.upper()])
+
+        if search:
+            query += " AND (ip LIKE ? OR city LIKE ? OR country LIKE ? OR path LIKE ?)"
+            s = f"%{search}%"
+            params.extend([s, s, s, s])
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(min(limit, 500))
+
+        db.execute(query, tuple(params))
+        rows = db.fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def get_access_stats() -> Dict[str, Any]:
+    with DBContext() as db:
+        # Total visits
+        db.execute("SELECT COUNT(*) FROM access_logs")
+        total_visits = db.fetchval() or 0
+
+        # Unique IPs
+        db.execute("SELECT COUNT(DISTINCT ip) FROM access_logs")
+        unique_ips = db.fetchval() or 0
+
+        # Today's visits (UTC prefix match)
+        today_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        db.execute("SELECT COUNT(*) FROM access_logs WHERE created_at LIKE ?", (f"{today_prefix}%",))
+        today_visits = db.fetchval() or 0
+
+        # Country breakdown
+        db.execute("""
+        SELECT country, country_code, COUNT(*) as visit_count, COUNT(DISTINCT ip) as unique_visitors
+        FROM access_logs
+        GROUP BY country, country_code
+        ORDER BY visit_count DESC
+        LIMIT 10
+        """)
+        top_countries = [dict(r) for r in db.fetchall()]
+
+        # Device breakdown
+        db.execute("""
+        SELECT device_type, COUNT(*) as count
+        FROM access_logs
+        GROUP BY device_type
+        ORDER BY count DESC
+        """)
+        device_breakdown = [dict(r) for r in db.fetchall()]
+
+        # Geographic coordinates grouped by location for Leaflet map markers
+        db.execute("""
+        SELECT 
+            city, country, country_code, latitude, longitude,
+            COUNT(*) as visit_count,
+            COUNT(DISTINCT ip) as unique_ips,
+            MAX(created_at) as last_seen
+        FROM access_logs
+        WHERE latitude != 0.0 AND longitude != 0.0
+        GROUP BY city, country, country_code, latitude, longitude
+        ORDER BY visit_count DESC
+        LIMIT 100
+        """)
+        geo_locations = [dict(r) for r in db.fetchall()]
+
+    return {
+        "total_visits": total_visits,
+        "unique_ips": unique_ips,
+        "today_visits": today_visits,
+        "top_countries": top_countries,
+        "device_breakdown": device_breakdown,
+        "geo_locations": geo_locations
+    }
+
+
+def clear_access_logs() -> bool:
+    with DBContext() as db:
+        db.execute("DELETE FROM access_logs")
+    return True
+
+
+def _seed_access_logs(db: DBContext):
+    """Populates realistic initial visitor logs across European & global locations."""
+    now = datetime.now(timezone.utc)
+    
+    seed_visitors = [
+        # Madrid
+        ("83.54.120.45", "España", "ES", "Madrid", "Madrid", 40.4168, -3.7038, "/", "Desktop", "Chrome on Windows"),
+        ("88.12.94.18", "España", "ES", "Madrid", "Madrid", 40.4238, -3.7065, "/api/v1/properties", "Mobile", "Safari on iPhone"),
+        ("212.128.4.10", "España", "ES", "Madrid", "Alcalá de Henares", 40.4819, -3.3643, "/lookingforhome/", "Desktop", "Firefox on macOS"),
+        # Barcelona & Catalunya
+        ("81.184.22.91", "España", "ES", "Catalunya", "Barcelona", 41.3851, 2.1734, "/", "Desktop", "Chrome on macOS"),
+        ("84.120.15.63", "España", "ES", "Catalunya", "Barcelona", 41.3980, 2.1950, "/lookingforhome/", "Mobile", "Chrome on Android"),
+        ("188.78.204.12", "España", "ES", "Catalunya", "Girona", 41.9794, 2.8214, "/", "Desktop", "Safari on macOS"),
+        # Valencia & Alicante
+        ("80.25.170.82", "España", "ES", "Comunidad Valenciana", "Valencia", 39.4699, -0.3763, "/", "Mobile", "Chrome on Android"),
+        ("88.24.110.15", "España", "ES", "Comunidad Valenciana", "Alicante", 38.3452, -0.4810, "/api/v1/properties", "Desktop", "Edge on Windows"),
+        # Andalucía (Sevilla, Málaga, Granada)
+        ("90.168.42.19", "España", "ES", "Andalucía", "Sevilla", 37.3891, -5.9845, "/", "Desktop", "Chrome on Windows"),
+        ("81.33.201.74", "España", "ES", "Andalucía", "Málaga", 36.7213, -4.4214, "/lookingforhome/", "Mobile", "Safari on iPhone"),
+        ("85.137.90.11", "España", "ES", "Andalucía", "Granada", 37.1773, -3.5986, "/", "Desktop", "Chrome on Linux"),
+        # Euskadi (Bilbao, San Sebastián)
+        ("85.84.14.22", "España", "ES", "País Vasco", "Bilbao", 43.2630, -2.9350, "/", "Desktop", "Firefox on Linux"),
+        ("83.213.88.51", "España", "ES", "País Vasco", "Donostia-San Sebastián", 43.3183, -1.9812, "/lookingforhome/", "Desktop", "Safari on macOS"),
+        # Zaragoza & Salamanca
+        ("88.7.192.40", "España", "ES", "Aragón", "Zaragoza", 41.6488, -0.8891, "/", "Mobile", "Chrome on Android"),
+        ("84.126.33.10", "España", "ES", "Castilla y León", "Salamanca", 40.9701, -5.6635, "/", "Desktop", "Chrome on Windows"),
+        # France (Paris, Lyon)
+        ("92.184.112.44", "Francia", "FR", "Île-de-France", "Paris", 48.8566, 2.3522, "/", "Desktop", "Chrome on macOS"),
+        ("90.84.210.19", "Francia", "FR", "Auvergne-Rhône-Alpes", "Lyon", 45.7640, 4.8357, "/lookingforhome/", "Mobile", "Safari on iPhone"),
+        # Germany (Berlin, Munich, Frankfurt)
+        ("178.62.204.88", "Alemania", "DE", "Berlin", "Berlin", 52.5200, 13.4050, "/", "Desktop", "Firefox on Windows"),
+        ("91.65.180.22", "Alemania", "DE", "Bavaria", "Múnich", 48.1351, 11.5820, "/lookingforhome/", "Desktop", "Chrome on Windows"),
+        # Netherlands (Amsterdam, Rotterdam)
+        ("145.131.40.12", "Países Bajos", "NL", "North Holland", "Ámsterdam", 52.3676, 4.9041, "/", "Desktop", "Chrome on macOS"),
+        # Portugal (Lisboa, Porto)
+        ("194.65.230.14", "Portugal", "PT", "Lisboa", "Lisboa", 38.7223, -9.1393, "/", "Mobile", "Chrome on Android"),
+        ("188.82.10.95", "Portugal", "PT", "Porto", "Porto", 41.1579, -8.6291, "/lookingforhome/", "Desktop", "Safari on macOS"),
+        # Italy (Roma, Milano)
+        ("151.48.90.31", "Italia", "IT", "Lazio", "Roma", 41.9028, 12.4964, "/", "Desktop", "Edge on Windows"),
+        ("93.41.120.65", "Italia", "IT", "Lombardia", "Milán", 45.4642, 9.1900, "/lookingforhome/", "Mobile", "Safari on iPhone"),
+        # Ireland (Dublin)
+        ("185.120.88.19", "Irlanda", "IE", "Leinster", "Dublín", 53.3498, -6.2603, "/", "Desktop", "Chrome on macOS"),
+        # United Kingdom (London)
+        ("86.154.210.42", "Reino Unido", "GB", "Greater London", "Londres", 51.5074, -0.1278, "/", "Desktop", "Safari on macOS"),
+        # United States & Latin America
+        ("104.28.34.164", "Estados Unidos", "US", "California", "San Francisco", 37.7749, -122.4194, "/", "Desktop", "Chrome on macOS"),
+        ("186.108.92.15", "Argentina", "AR", "Buenos Aires", "Buenos Aires", -34.6037, -58.3816, "/lookingforhome/", "Mobile", "Chrome on Android"),
+        ("189.200.45.18", "México", "MX", "Ciudad de México", "Ciudad de México", 19.4326, -99.1332, "/", "Mobile", "Safari on iPhone"),
+        ("181.140.22.80", "Colombia", "CO", "Bogotá", "Bogotá", 4.7110, -74.0721, "/", "Desktop", "Chrome on Windows")
+    ]
+
+    from datetime import timedelta
+    for i, item in enumerate(seed_visitors):
+        ip, country, ccode, region, city, lat, lng, path, dev, ua = item
+        # Distribute timestamps over last 48 hours
+        t_delta = timedelta(hours=(len(seed_visitors) - i) * 1.5, minutes=(i * 17) % 60)
+        t_str = (now - t_delta).isoformat()
+        log_id = f"seed-log-{i+1:03d}"
+
+        db.execute("""
+        INSERT INTO access_logs (
+            id, ip, country, country_code, region, city, latitude, longitude,
+            path, method, status_code, user_agent, device_type, referrer, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            log_id, ip, country, ccode, region, city, lat, lng,
+            path, "GET", 200, ua, dev, "https://lookingforhome.duckdns.org", t_str
+        ))
+

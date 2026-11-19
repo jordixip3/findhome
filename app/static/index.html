@@ -39,6 +39,9 @@
       <button class="nav-btn" id="nav-btn-stats" onclick="openStatsModal()">
         <span>📊</span> <span data-i18n="nav_stats">Métricas</span>
       </button>
+      <button class="nav-btn" id="nav-btn-admin" onclick="openAdminPanel()">
+        <span>🛡️</span> <span data-i18n="nav_admin">Admin &amp; Visitas</span>
+      </button>
     </nav>
 
     <!-- Language Selector (5 languages: ES, EN, CA, EU, FR) -->
@@ -623,6 +626,187 @@
 
       <div class="lightbox-filmstrip" id="lightbox-filmstrip">
         <!-- Thumbnails generated dynamically by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Login Modal -->
+  <div class="modal-overlay" id="admin-login-modal" onclick="if(event.target===this) closeAdminLoginModal()">
+    <div class="modal-container" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>🛡️</span> Acceso de Administración
+        </h3>
+        <button class="modal-close-btn" onclick="closeAdminLoginModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <p style="color: var(--text-sub); font-size: 0.85rem; margin-bottom: 18px; line-height: 1.5;">
+          Introduce la contraseña de administración para acceder al panel de monitorización de entradas, origen geográfico por IP y mapa de visitas en tiempo real.
+        </p>
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Contraseña de Administrador</label>
+          <input type="password" id="admin-password-input" class="form-input" placeholder="Introduce contraseña..." onkeydown="if(event.key==='Enter') submitAdminLogin()" style="width: 100%; padding: 10px 14px; font-size: 0.95rem;">
+        </div>
+        <div id="admin-login-error" style="display: none; color: #f87171; font-size: 0.82rem; margin-bottom: 14px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 12px; border-radius: 8px;"></div>
+        <button class="btn-submit" style="width: 100%; padding: 12px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="submitAdminLogin()">
+          <span>🔓</span> <span>Acceder al Panel de Control</span>
+        </button>
+        <div style="margin-top: 14px; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
+          LookingForHome Secure Admin Engine &bull; Contraseña: <code>admin123</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Visitor Analytics & Geo Mapping Modal -->
+  <div class="modal-overlay" id="admin-dashboard-modal" onclick="if(event.target===this) closeAdminDashboardModal()">
+    <div class="modal-container" style="max-width: 1280px; width: 95vw; max-height: 94vh;">
+      <div class="modal-header" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98)); border-bottom: 1px solid var(--border-subtle); padding: 16px 24px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 1.8rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+            🛡️
+          </div>
+          <div>
+            <h3 class="modal-title" style="font-size: 1.25rem; font-weight: 800; color: #ffffff; margin: 0;">
+              Panel de Control de Entradas &amp; Geolocalización IP
+            </h3>
+            <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 2px;">
+              Mapeo geográfico de visitantes, procedencia por IP, países y telemetría en tiempo real
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn-card-action" onclick="refreshAdminData()" title="Refrescar datos en vivo" style="display: flex; align-items: center; gap: 6px; padding: 7px 14px;">
+            <span>🔄</span> <span>Actualizar</span>
+          </button>
+          <button class="btn-card-action" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(52, 211, 153, 0.35); color: var(--emerald-400);" onclick="simulateTestVisit()" title="Registrar tu visita actual o simular">
+            <span>⚡</span> <span>Registrar Mi Visita</span>
+          </button>
+          <button class="modal-close-btn" onclick="closeAdminDashboardModal()">&times;</button>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding: 24px; overflow-y: auto; max-height: calc(94vh - 80px);">
+        <!-- KPI Cards -->
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">🌐</div>
+            <div class="admin-kpi-info">
+              <span class="admin-kpi-label">TOTAL ENTRADAS</span>
+              <strong class="admin-kpi-val" id="admin-stat-total">0</strong>
+            </div>
+          </div>
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon" style="background: rgba(52, 211, 153, 0.15); color: #34d399;">📍</div>
+            <div class="admin-kpi-info">
+              <span class="admin-kpi-label">IPS ÚNICAS</span>
+              <strong class="admin-kpi-val" id="admin-stat-ips" style="color: #34d399;">0</strong>
+            </div>
+          </div>
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">🌍</div>
+            <div class="admin-kpi-info">
+              <span class="admin-kpi-label">PAÍSES DE ORIGEN</span>
+              <strong class="admin-kpi-val" id="admin-stat-countries" style="color: #c084fc;">0</strong>
+            </div>
+          </div>
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24;">⚡</div>
+            <div class="admin-kpi-info">
+              <span class="admin-kpi-label">VISITAS HOY (24H)</span>
+              <strong class="admin-kpi-val" id="admin-stat-today" style="color: #fbbf24;">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Interactive Map of Visitor Locations -->
+        <div class="admin-section-card" style="margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.2rem;">🗺️</span>
+              <h4 style="font-size: 0.98rem; font-weight: 700; color: #ffffff; margin: 0;">
+                Mapa Geográfico de Entradas y Posiciones IP
+              </h4>
+              <span style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.15); color: var(--azure-400); padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                Leaflet Multi-Point Tracking
+              </span>
+            </div>
+
+            <!-- Quick Map Presets -->
+            <div style="display: flex; gap: 6px;">
+              <button class="btn-map-control" onclick="adminMapFlyTo([30.0, 10.0], 2)">🌍 Vista Global</button>
+              <button class="btn-map-control" onclick="adminMapFlyTo([48.5, 4.0], 4)">🇪🇺 Europa</button>
+              <button class="btn-map-control" onclick="adminMapFlyTo([40.4168, -3.7038], 6)">🇪🇸 España</button>
+            </div>
+          </div>
+
+          <!-- Leaflet Map Container -->
+          <div id="admin-visitor-map" style="height: 420px; width: 100%; border-radius: 10px; border: 1px solid var(--border-subtle); overflow: hidden; background: #0b1120;"></div>
+        </div>
+
+        <!-- Two Column Analytics Grid -->
+        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 24px;">
+          <!-- Left: Countries & Devices breakdown -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="admin-section-card">
+              <h5 style="font-size: 0.88rem; font-weight: 700; color: #ffffff; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <span>🌐 Top Países de Procedencia</span>
+                <span style="font-size: 0.72rem; color: var(--text-sub);" id="admin-top-countries-count">0 países</span>
+              </h5>
+              <div id="admin-countries-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically rendered -->
+              </div>
+            </div>
+
+            <div class="admin-section-card">
+              <h5 style="font-size: 0.88rem; font-weight: 700; color: #ffffff; margin-bottom: 12px;">
+                📱 Dispositivos &amp; Clientes
+              </h5>
+              <div id="admin-devices-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Dynamically rendered -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Real-time Access Log Table -->
+          <div class="admin-section-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h5 style="font-size: 0.9rem; font-weight: 700; color: #ffffff; margin: 0;">
+                  📋 Registro Detallado de Accesos
+                </h5>
+                <span style="font-size: 0.75rem; color: var(--text-sub);">Mostrando las últimas visitas capturadas</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" id="admin-search-input" class="form-input" placeholder="🔍 Filtrar por IP, ciudad o país..." style="padding: 6px 12px; font-size: 0.8rem; width: 230px;" oninput="filterAdminLogs()">
+                <button class="btn-card-action" onclick="exportAdminLogsToCSV()" title="Descargar como archivo CSV" style="font-size: 0.78rem; padding: 6px 10px;">
+                  📥 CSV
+                </button>
+              </div>
+            </div>
+
+            <!-- Table Container -->
+            <div style="overflow-x: auto; max-height: 480px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
+              <table class="admin-logs-table">
+                <thead>
+                  <tr>
+                    <th>Fecha &amp; Hora</th>
+                    <th>IP Origen</th>
+                    <th>País / Región</th>
+                    <th>Ciudad</th>
+                    <th>Ruta Visitada</th>
+                    <th>Dispositivo</th>
+                    <th>Geoposición</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-logs-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

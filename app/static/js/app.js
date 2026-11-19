@@ -1038,9 +1038,9 @@ function initMap() {
     scrollWheelZoom: true
   }).setView([46.5, 4.0], 5);
 
-  // ArcGIS World Street Map (Crisp European streets, zero API key required, zero watermarks, fast CDN)
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Sources: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, TomTom',
+  // OpenStreetMap Standard (100% Free, Zero API Key Required, Zero Watermarks)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
     maxZoom: 19
   }).addTo(leafletMap);
 }
@@ -2545,6 +2545,8 @@ function getCountryFlag(code) {
   return '🌐';
 }
 
+let adminTileLayer = null;
+
 function renderAdminMap(geoLocations) {
   const mapContainer = document.getElementById('admin-visitor-map');
   if (!mapContainer) return;
@@ -2558,18 +2560,31 @@ function renderAdminMap(geoLocations) {
       zoomControl: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
+    // 100% Free OpenStreetMap Standard - Guaranteed ZERO API KEY REQUIRED & Zero Watermarks
+    adminTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(adminMap);
   }
 
-  // Clear existing markers
+  // Clear existing layers
   adminMarkers.forEach(m => adminMap.removeLayer(m));
   adminMarkers = [];
 
   const bounds = L.latLngBounds([]);
+  const HUB_LATLNG = [40.4168, -3.7038]; // Madrid central platform hub
+
+  // Draw Central Platform Hub
+  const hubMarker = L.circleMarker(HUB_LATLNG, {
+    radius: 8,
+    fillColor: '#38bdf8',
+    color: '#ffffff',
+    weight: 3,
+    opacity: 1,
+    fillOpacity: 0.95
+  }).addTo(adminMap);
+  hubMarker.bindTooltip("🏢 <strong>LookingForHome Core Hub (Madrid)</strong>", { permanent: false, direction: 'top' });
+  adminMarkers.push(hubMarker);
 
   geoLocations.forEach(loc => {
     if (!loc.latitude || !loc.longitude) return;
@@ -2577,10 +2592,36 @@ function renderAdminMap(geoLocations) {
     bounds.extend(latLng);
 
     const vCount = loc.visit_count || loc.visits || 1;
+    const uIps = loc.unique_ips || 1;
+    const flag = getCountryFlag(loc.country_code);
+
+    // Color gradient based on traffic volume
+    let nodeColor = '#38bdf8'; // Cyan
+    if (vCount > 15) nodeColor = '#ef4444'; // Red
+    else if (vCount > 5) nodeColor = '#f59e0b'; // Amber
+    else if (vCount > 1) nodeColor = '#10b981'; // Green
+
+    // 1. Glowing radial circle area proportional to visits
+    const circleRadius = Math.min(32, Math.max(7, Math.sqrt(vCount) * 6));
+    const circle = L.circleMarker(latLng, {
+      radius: circleRadius,
+      fillColor: nodeColor,
+      color: nodeColor,
+      weight: 2,
+      opacity: 0.9,
+      fillOpacity: 0.35
+    }).addTo(adminMap);
+
+    circle.bindTooltip(`📍 <strong>${loc.city || 'Desconocido'}, ${loc.country}</strong><br>⚡ ${vCount} visitas (${uIps} IPs únicas)`, {
+      sticky: true
+    });
+    adminMarkers.push(circle);
+
+    // 2. Center Pin Marker with visit counter badge
     const pinHtml = `
-      <div style="position: relative; width: 30px; height: 30px;">
-        <div class="admin-pulse-ring"></div>
-        <div class="admin-marker-pin" style="background: ${vCount > 10 ? '#ef4444' : '#0284c7'};">
+      <div style="position: relative; width: 30px; height: 30px; cursor: pointer;">
+        <div class="admin-pulse-ring" style="border-color: ${nodeColor};"></div>
+        <div class="admin-marker-pin" style="background: ${nodeColor};">
           <span style="transform: rotate(45deg); font-size: 10px; font-weight: 800; color: #fff;">${vCount > 99 ? '99+' : vCount}</span>
         </div>
       </div>
@@ -2594,20 +2635,40 @@ function renderAdminMap(geoLocations) {
     });
 
     const marker = L.marker(latLng, { icon }).addTo(adminMap);
-    const flag = getCountryFlag(loc.country_code);
+
+    // 3. Traffic ingress connection line to central hub
+    const isLocalHub = Math.abs(loc.latitude - HUB_LATLNG[0]) < 0.1 && Math.abs(loc.longitude - HUB_LATLNG[1]) < 0.1;
+    if (!isLocalHub) {
+      const line = L.polyline([HUB_LATLNG, latLng], {
+        color: nodeColor,
+        weight: 1.5,
+        opacity: 0.45,
+        dashArray: '4, 8'
+      }).addTo(adminMap);
+      adminMarkers.push(line);
+    }
 
     const popupHtml = `
-      <div style="font-family: var(--font-main); min-width: 200px; color: #0f172a; padding: 4px;">
-        <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; margin-bottom: 4px;">
-          <span>${flag}</span>
-          <span>${loc.city || 'Desconocido'}, ${loc.country}</span>
+      <div style="font-family: var(--font-main); min-width: 220px; color: #0f172a; padding: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px;">
+            <span>${flag}</span>
+            <span>${loc.city || 'Desconocido'}</span>
+          </div>
+          <span style="font-size: 10px; font-weight: 700; color: ${nodeColor}; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;">
+            ${vCount} ${vCount === 1 ? 'visita' : 'visitas'}
+          </span>
         </div>
-        <div style="background: #f1f5f9; padding: 6px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 6px;">
-          <div><strong>Total visitas:</strong> ${vCount}</div>
-          <div><strong>IPs únicas:</strong> ${loc.unique_ips || 1}</div>
-          <div><strong>Último acceso:</strong> ${loc.last_seen ? loc.last_seen.substring(0, 19).replace('T', ' ') : 'Reciente'}</div>
-          <div><strong>Coords:</strong> ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</div>
+        <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
+          📍 ${loc.country} (${loc.country_code || 'UN'}) &bull; Coords: ${loc.latitude.toFixed(2)}, ${loc.longitude.toFixed(2)}
         </div>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 8px;">
+          <div><strong>IPs únicas conectadas:</strong> ${uIps}</div>
+          <div><strong>Último acceso registrado:</strong> ${loc.last_seen ? loc.last_seen.substring(0, 19).replace('T', ' ') : 'Reciente'}</div>
+        </div>
+        <button onclick="document.getElementById('admin-search-input').value='${loc.city}'; filterAdminLogs();" style="width: 100%; background: #0284c7; color: white; border: none; padding: 5px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; cursor: pointer;">
+          🔍 Filtrar registros de esta ciudad
+        </button>
       </div>
     `;
 
@@ -2628,6 +2689,7 @@ function adminMapFlyTo(coords, zoom) {
     adminMap.flyTo(coords, zoom, { duration: 1.2 });
   }
 }
+
 
 function renderAdminLogsTable(logs) {
   const tbody = document.getElementById('admin-logs-tbody');

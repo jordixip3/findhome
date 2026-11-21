@@ -270,11 +270,20 @@ from app.services.voice_agent_service import voice_agent, AGENT_WHATSAPP_NUMBER
 class VoiceAgentRequest(BaseModel):
     message: str
     lang: Optional[str] = "es"
+    user_id: Optional[str] = None
+    user_name: Optional[str] = "Usuario"
+    channel: Optional[str] = "web"
     context: Optional[Dict[str, Any]] = None
 
 @router.post("/voice-agent/chat", summary="Conversational AI Voice Agent linked to WhatsApp +34 603 331 391")
 async def voice_agent_chat(payload: VoiceAgentRequest):
-    return voice_agent.process_query(payload.message, lang=payload.lang or "es")
+    return voice_agent.process_query(
+        payload.message,
+        lang=payload.lang or "es",
+        user_id=payload.user_id or "web_session",
+        user_name=payload.user_name or "Usuario",
+        channel=payload.channel or "web"
+    )
 
 @router.get("/voice-agent/config", summary="Get Voice Agent configuration and WhatsApp link")
 async def voice_agent_config():
@@ -355,18 +364,28 @@ async def handle_whatsapp_webhook(request: Request):
         except Exception as e:
             print(f"[WhatsAppWebhook] Parse error from Meta format: {e}")
 
-    # 2. Direct simulation payload format
-    if not message_text and ("message" in data or "from_number" in data):
-        from_number = data.get("from_number", from_number)
+    # 2. Direct gateway / Baileys payload format
+    if not message_text and ("message" in data or "from_number" in data or "from" in data):
+        from_number = str(data.get("from") or data.get("from_number") or from_number)
+        if not from_number.startswith("+"):
+            from_number = f"+{from_number}"
         message_text = data.get("message", "")
         message_type = data.get("message_type", "text")
         audio_url = data.get("audio_url", "")
 
+    user_name = data.get("name", "Usuario")
+
     if not message_text:
         message_text = "Hola, solicito información sobre alquiler de habitaciones y minicomunidades"
 
-    # Process through AI Voice Agent
-    agent_response = voice_agent.process_query(message_text, lang="es")
+    # Process through AI Voice Agent with stateful multi-turn memory
+    agent_response = voice_agent.process_query(
+        message_text,
+        lang="es",
+        user_id=from_number,
+        user_name=user_name,
+        channel="whatsapp"
+    )
     reply_text = agent_response.get("reply_text", "Hola, hemos recibido tu mensaje en LookingForHome (+34 603 331 391).")
 
     # Record interaction log in database
